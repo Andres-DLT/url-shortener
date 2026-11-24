@@ -1,0 +1,74 @@
+name: url-shortener
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: shortener
+      POSTGRES_PASSWORD: shortener
+      POSTGRES_DB: shortener
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shortener -d shortener"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    # AOF: los clics que aún estén en el stream sobreviven a un reinicio de Redis.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # API REST + redirecciones + panel (frontend compilado)
+  app:
+    build: .
+    image: url-shortener:latest
+    ports:
+      - "${PORT:-3000}:3000"
+    environment: &app-env
+      DATABASE_URL: postgres://shortener:shortener@postgres:5432/shortener
+      REDIS_URL: redis://redis:6379
+      BASE_URL: ${BASE_URL:-http://localhost:3000}
+      IP_HASH_SALT: ${IP_HASH_SALT:-cambia-esta-sal-en-produccion}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      PUBLIC_DASHBOARD: ${PUBLIC_DASHBOARD:-true}
+      SEED_DEMO_ON_EMPTY: ${SEED_DEMO_ON_EMPTY:-false}
+      RUN_WORKER_INLINE: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Worker que vuelca los clics del Redis Stream a PostgreSQL.
+  # Escala horizontalmente: docker compose up --scale worker=3
+  worker:
+    image: url-shortener:latest
+    command: ["node", "server/src/worker.js"]
+    environment: *app-env
+    healthcheck:
+      disable: true
+    depends_on:
+      app:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:

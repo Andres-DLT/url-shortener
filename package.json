@@ -1,0 +1,16 @@
+{
+  "name": "url-shortener",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Acortador de URLs con analíticas (Node.js, PostgreSQL, Redis, React)",
+  "scripts": {
+    "setup": "npm ci --prefix server && npm ci --prefix client",
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "build": "npm run build --prefix client",
+    "start": "npm start --prefix server",
+    "worker": "npm run worker --prefix server",
+    "seed": "npm run seed --prefix server",
+    "test": "npm test --prefix server"
+  }
+}

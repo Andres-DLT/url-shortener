@@ -1,0 +1,54 @@
+# Blueprint de Render: despliegue gratuito con un clic.
+#   - Web service (Docker, plan free): API + redirecciones + panel + worker de clics.
+#   - Key Value (Redis compatible, plan free): caché, Redis Stream de clics y rate limiting.
+#   - PostgreSQL: Neon (plan gratuito permanente). La URL se pide al crear el Blueprint.
+#     (El Postgres gratuito de Render se elimina a los 30 días; por eso se usa Neon).
+services:
+  - type: web
+    name: url-shortener
+    runtime: docker
+    plan: free
+    region: ohio
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Cadena de conexión de Neon (postgresql://…?sslmode=require).
+      - key: DATABASE_URL
+        sync: false
+      # Contraseña para crear/editar/borrar enlaces desde el panel.
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: url-shortener-redis
+          property: connectionString
+      - key: IP_HASH_SALT
+        generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true
+      # Render pone un proxy delante: la IP real del visitante viene en X-Forwarded-For.
+      - key: TRUST_PROXY
+        value: "true"
+      # Panel visible para cualquiera en modo solo lectura (útil como portafolio).
+      - key: PUBLIC_DASHBOARD
+        value: "true"
+      # Carga enlaces de demostración la primera vez (base de datos vacía).
+      - key: SEED_DEMO_ON_EMPTY
+        value: "true"
+      # El plan free no incluye background workers: el worker corre dentro del web service.
+      - key: RUN_WORKER_INLINE
+        value: "true"
+
+  - type: keyvalue
+    name: url-shortener-redis
+    plan: free
+    region: ohio
+    # Solo accesible desde servicios de Render (red interna).
+    ipAllowList: []
+    # Expulsa solo claves con TTL (cachés); nunca el stream de clics ni su consumer group.
+    maxmemoryPolicy: volatile-lru
