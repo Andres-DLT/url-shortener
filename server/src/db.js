@@ -7,6 +7,8 @@ pg.types.setTypeParser(pg.types.builtins.INT8, (v) => Number.parseInt(v, 10));
 
 export const pool = new pg.Pool({
   connectionString: config.databaseUrl,
+  // Neon añade channel_binding=require: pg no lo lee de la URL, se activa aquí (SCRAM-SHA-256-PLUS sobre TLS).
+  enableChannelBinding: /[?&]channel_binding=require\b/.test(config.databaseUrl),
   max: 10,
   idleTimeoutMillis: 30_000,
 });
